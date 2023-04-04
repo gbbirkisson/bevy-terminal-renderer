@@ -20,4 +20,5 @@ example-physics-balls:
 
 .PHONY: example-physics-balls-record
 example-physics-balls-record:
-	cd ${EXAMPLE_PHYSICS_BALLS} && asciinema rec --overwrite -c "cargo run" test.rec && agg test.rec test.gif && convert -loop 0 test.gif demo.gif && rm test.*
+	cd ${EXAMPLE_PHYSICS_BALLS} && cargo build -r
+	cd ${EXAMPLE_PHYSICS_BALLS} && asciinema rec --overwrite -c "cargo run -q -r" test.rec && agg test.rec test.gif && convert -loop 0 test.gif demo.gif && rm test.*
