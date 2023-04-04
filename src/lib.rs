@@ -10,6 +10,7 @@ use pancurses::{
 struct Term {
     window: Window,
     wide: bool,
+    minz: f32,
 }
 
 // Window cannot be passed between threads, but there is only ever 1 thread at a time that uses it
@@ -21,6 +22,7 @@ unsafe impl Sync for Term {}
 #[derive(Resource)]
 struct TermContext {
     wide: bool,
+    minz: f32,
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
@@ -48,13 +50,9 @@ pub enum TermTextAlign {
     RIGHT,
 }
 
-#[derive(Component)]
-pub struct TermZBuffer(pub isize);
-
 #[derive(Bundle)]
 pub struct TermSpriteBundle {
     pub char: TermChar,
-    pub z: TermZBuffer,
 
     #[bundle]
     pub position: TransformBundle,
@@ -64,7 +62,6 @@ impl Default for TermSpriteBundle {
     fn default() -> Self {
         Self {
             char: TermChar('?'),
-            z: TermZBuffer(0),
             position: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
         }
     }
@@ -74,7 +71,6 @@ impl Default for TermSpriteBundle {
 pub struct TermTextBundle {
     pub text: TermText,
     pub align: TermTextAlign,
-    pub z: TermZBuffer,
 
     #[bundle]
     pub position: TransformBundle,
@@ -85,7 +81,6 @@ impl Default for TermTextBundle {
         Self {
             text: TermText::from("?"),
             align: TermTextAlign::CENTER,
-            z: TermZBuffer(0),
             position: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
         }
     }
@@ -156,23 +151,30 @@ pub enum TermCommand {
 }
 
 pub struct TermPlugin {
-    wide: bool,
+    pub wide: bool,
+    pub minz: f32,
 }
 
-impl TermPlugin {
-    pub fn wide(wide: bool) -> Self {
-        Self { wide }
+impl Default for TermPlugin {
+    fn default() -> Self {
+        Self {
+            wide: false,
+            minz: f32::MIN,
+        }
     }
 }
 
 impl Plugin for TermPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(TermContext { wide: self.wide })
-            .add_event::<TermInput>()
-            .add_event::<TermCommand>()
-            .add_startup_system(create_terminal)
-            .add_system(handle_terminal.in_base_set(TermBaseSet::Handle))
-            .configure_set(TermBaseSet::Handle.before(CoreSet::PreUpdate));
+        app.insert_resource(TermContext {
+            wide: self.wide,
+            minz: self.minz,
+        })
+        .add_event::<TermInput>()
+        .add_event::<TermCommand>()
+        .add_startup_system(create_terminal)
+        .add_system(handle_terminal.in_base_set(TermBaseSet::Handle))
+        .configure_set(TermBaseSet::Handle.before(CoreSet::PreUpdate));
     }
 }
 
@@ -193,6 +195,7 @@ fn create_terminal(mut commands: Commands, context: Res<TermContext>) {
     commands.spawn(Term {
         window,
         wide: context.wide,
+        minz: context.minz,
     });
 }
 
@@ -201,8 +204,8 @@ fn handle_terminal(
     terminal: Query<&Term>,
     mut terminal_size: Query<&mut TermSize>,
     camera: Query<&GlobalTransform, With<TermCamera>>,
-    chars: Query<(&GlobalTransform, &TermChar, &TermZBuffer)>,
-    texts: Query<(&GlobalTransform, &TermText, &TermTextAlign, &TermZBuffer)>,
+    chars: Query<(&GlobalTransform, &TermChar)>,
+    texts: Query<(&GlobalTransform, &TermText, &TermTextAlign)>,
     mut ev_input: EventWriter<TermInput>,
     mut exit: EventWriter<AppExit>,
     mut ev_cmd: EventReader<TermCommand>,
@@ -216,6 +219,7 @@ fn handle_terminal(
         .expect("We should always have a terminal");
     let window = &terminal.window;
     let wide = terminal.wide;
+    let minz = terminal.minz;
 
     let mut resize = false;
 
@@ -257,7 +261,7 @@ fn handle_terminal(
     // Prepare drawing
     let c = c as usize;
     let r = r as usize;
-    let mut buffer = vec![vec![(' ', isize::MIN); r]; c];
+    let mut buffer = vec![vec![(' ', minz); r]; c];
 
     // Calculate camera offset
     let (camera_offset_x, camera_offset_y) = match camera.get_single() {
@@ -274,10 +278,10 @@ fn handle_terminal(
     };
 
     // Fill buffer with chars
-    for (transform, char, z) in chars.iter() {
+    for (transform, char) in chars.iter() {
         let mut x = transform.translation().x.floor() as isize;
         let y = transform.translation().y.floor() as isize;
-        let z = z.0;
+        let z = transform.translation().z;
 
         if wide {
             x *= 2;
@@ -303,12 +307,12 @@ fn handle_terminal(
     }
 
     // Fill buffer with text
-    for (transform, text, align, z) in texts.iter() {
+    for (transform, text, align) in texts.iter() {
         let text = &text.0;
         let text_len = text.len();
         let x = transform.translation().x.floor() as isize;
         let y = transform.translation().y.floor() as isize;
-        let z = z.0;
+        let z = transform.translation().z.floor();
 
         let x = x + camera_offset_x;
         let y = -y + camera_offset_y;
