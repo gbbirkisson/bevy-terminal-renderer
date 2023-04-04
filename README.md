@@ -6,14 +6,10 @@ This project is a terminal renderer for the amazing [bevy game engine](https://b
 
 > **Note**: This has only been tested on Linux!
 
-<h2>Table of contents</h2>
-
-<!-- vim-markdown-toc GFM -->
-
-* [How to use this](#how-to-use-this)
-
-<!-- vim-markdown-toc -->
-
-## How to use this
+## How to use this?
 
 Take a look at the [examples](./examples) to get some ideas!
+
+#### [Example: Using a physics engine](./examples/physics-balls)
+
+<a href="https://github.com/gbbirkisson/bevy-terminal-renderer/tree/main/examples/physics-balls"><img src="https://raw.githubusercontent.com/gbbirkisson/bevy-terminal-renderer/main/examples/physics-balls/demo.gif"></a>
