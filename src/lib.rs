@@ -169,7 +169,6 @@ impl Plugin for TermPlugin {
         app.insert_resource(TermContext { wide: self.wide })
             .add_event::<TermInput>()
             .add_event::<TermCommand>()
-            .add_plugin(TransformPlugin)
             .add_startup_system(create_terminal)
             .add_system(handle_terminal.in_base_set(TermBaseSet::Handle))
             .configure_set(TermBaseSet::Handle.before(CoreSet::PreUpdate));
@@ -419,14 +418,12 @@ fn handle_terminal(
         let x = x as usize;
         let y = y as usize;
 
-        let text_bytes = text.as_bytes();
-
-        for i in 0..text_len {
+        for (i, char) in text.chars().enumerate() {
             let x = x + i;
             if x < c {
                 let (_, oldz) = buffer[x][y];
                 if z >= oldz {
-                    buffer[x][y] = (text_bytes[i] as char, z);
+                    buffer[x][y] = (char, z);
                 }
             }
         }

@@ -22,18 +22,20 @@ fn main() {
         )))
         .add_plugins(MinimalPlugins)
         .add_plugin(TermPlugin::wide(true))
+        .add_plugin(TransformPlugin) // This is needed to update global transforms
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(1.0))
         .add_startup_system(create_scene)
         .add_system(camera_control)
         .add_system(exit_control)
         .add_system(spawn_balls)
+        .add_system(despawn_balls)
         .run();
 }
 
 fn create_scene(mut commands: Commands) {
     // Setup camera
     commands.spawn(TermCameraBundle {
-        position: TransformBundle::from(Transform::from_xyz(0.0, 30.0, 0.0)),
+        position: TransformBundle::from(Transform::from_xyz(0.0, 10.0, 0.0)),
         ..Default::default()
     });
 
@@ -76,13 +78,18 @@ fn create_scene(mut commands: Commands) {
         .spawn(TransformBundle::from(Transform::from_xyz(0.0, -1.0, 0.0)))
         .with_children(|p| {
             p.spawn(TermTextBundle {
-                text: TermText::from("Spawn balls: spacebar"),
+                text: TermText::from("        Move camera: ↑ ↓ ← →"),
                 position: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
                 ..Default::default()
             });
             p.spawn(TermTextBundle {
-                text: TermText::from("       Exit: q or esc"),
+                text: TermText::from("Spawn balls: spacebar"),
                 position: TransformBundle::from(Transform::from_xyz(0.0, -1.0, 0.0)),
+                ..Default::default()
+            });
+            p.spawn(TermTextBundle {
+                text: TermText::from("       Exit: q or esc"),
+                position: TransformBundle::from(Transform::from_xyz(0.0, -2.0, 0.0)),
                 ..Default::default()
             });
         });
@@ -108,6 +115,15 @@ fn spawn_balls(mut input: EventReader<TermInput>, mut commands: Commands) {
                     });
             }
             _ => {}
+        }
+    }
+}
+
+fn despawn_balls(mut commands: Commands, query: Query<(Entity, &GlobalTransform)>) {
+    // Despawn balls that fall off the screen
+    for (entity, transform) in query.iter() {
+        if transform.translation().y < -20.0 {
+            commands.entity(entity).despawn_recursive();
         }
     }
 }
