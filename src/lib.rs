@@ -32,6 +32,22 @@ enum TermBaseSet {
 pub struct TermChar(pub char);
 
 #[derive(Component)]
+pub struct TermText(pub String);
+
+impl From<&str> for TermText {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+#[derive(Component)]
+pub enum TermTextAlign {
+    LEFT,
+    CENTER,
+    RIGHT,
+}
+
+#[derive(Component)]
 pub struct TermZBuffer(pub isize);
 
 #[derive(Bundle)]
@@ -47,8 +63,29 @@ impl Default for TermSpriteBundle {
     fn default() -> Self {
         Self {
             char: TermChar('?'),
-            position: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
             z: TermZBuffer(0),
+            position: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
+        }
+    }
+}
+
+#[derive(Bundle)]
+pub struct TermTextBundle {
+    pub text: TermText,
+    pub align: TermTextAlign,
+    pub z: TermZBuffer,
+
+    #[bundle]
+    pub position: TransformBundle,
+}
+
+impl Default for TermTextBundle {
+    fn default() -> Self {
+        Self {
+            text: TermText("?".to_string()),
+            align: TermTextAlign::CENTER,
+            z: TermZBuffer(0),
+            position: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
         }
     }
 }
@@ -162,7 +199,8 @@ fn handle_terminal(
     terminal: Query<&Term>,
     mut terminal_size: Query<&mut TermSize>,
     camera: Query<&GlobalTransform, With<TermCamera>>,
-    entities: Query<(&GlobalTransform, &TermChar, Option<&TermZBuffer>)>,
+    chars: Query<(&GlobalTransform, &TermChar, &TermZBuffer)>,
+    texts: Query<(&GlobalTransform, &TermText, &TermTextAlign, &TermZBuffer)>,
     mut ev_input: EventWriter<TermInput>,
     mut exit: EventWriter<AppExit>,
     mut ev_cmd: EventReader<TermCommand>,
@@ -327,23 +365,69 @@ fn handle_terminal(
         }
     };
 
-    // Fill buffer
-    for (transform, icon, z) in entities.iter() {
+    // Fill buffer with chars
+    for (transform, char, z) in chars.iter() {
         let mut x = transform.translation().x.floor() as isize;
         let y = transform.translation().y.floor() as isize;
-        let z = z.map(|z| z.0).unwrap_or(0);
+        let z = z.0;
 
         if wide {
             x *= 2;
         }
 
-        let x = (x + camera_offset_x) as usize;
-        let y = (-y + camera_offset_y) as usize;
+        let x = x + camera_offset_x;
+        let y = -y + camera_offset_y;
+
+        if x < 0 || y < 0 {
+            // This char is not in view
+            continue;
+        }
+
+        let x = x as usize;
+        let y = y as usize;
 
         if x < c && y < r {
             let (_, oldz) = buffer[x][y];
             if z >= oldz {
-                buffer[x][y] = (icon.0, z);
+                buffer[x][y] = (char.0, z);
+            }
+        }
+    }
+
+    // Fill buffer with text
+    for (transform, text, align, z) in texts.iter() {
+        let text = &text.0;
+        let text_len = text.len();
+        let x = transform.translation().x.floor() as isize;
+        let y = transform.translation().y.floor() as isize;
+        let z = z.0;
+
+        let x = x + camera_offset_x;
+        let y = -y + camera_offset_y;
+
+        let x = match align {
+            TermTextAlign::LEFT => x,
+            TermTextAlign::CENTER => x - (text_len as isize / 2),
+            TermTextAlign::RIGHT => x - text_len as isize,
+        };
+
+        if (x < 0 && x + (text_len as isize) < 0) || y < 0 || y > (r as isize) {
+            // No part of this text is in view
+            continue;
+        }
+
+        let x = x as usize;
+        let y = y as usize;
+
+        let text_bytes = text.as_bytes();
+
+        for i in 0..text_len {
+            let x = x + i;
+            if x < c {
+                let (_, oldz) = buffer[x][y];
+                if z >= oldz {
+                    buffer[x][y] = (text_bytes[i] as char, z);
+                }
             }
         }
     }

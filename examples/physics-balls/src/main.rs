@@ -4,8 +4,8 @@ use rand::Rng;
 
 use bevy_terminal_renderer::*;
 
-const GROUND_SIZE: isize = 50;
-const WALL_SIZE: isize = 10;
+const GROUND_SIZE: isize = 20;
+const WALL_SIZE: isize = 5;
 
 const NR_BALL_TYPES: usize = 7;
 const BALLS: [char; NR_BALL_TYPES] = ['🔴', '🔵', '🟢', '🟡', '🟠', '🟣', '🟤'];
@@ -39,7 +39,7 @@ fn create_scene(mut commands: Commands) {
 
     // Create ground
     commands
-        .spawn(Collider::cuboid(GROUND_SIZE as f32, 1.005)) // Its a bit bigger than 1
+        .spawn(Collider::cuboid(GROUND_SIZE as f32, 1.0))
         .insert(TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)))
         .with_children(|p| {
             for i in -GROUND_SIZE..=GROUND_SIZE {
@@ -70,6 +70,22 @@ fn create_scene(mut commands: Commands) {
                 }
             });
     }
+
+    // Create text
+    commands
+        .spawn(TransformBundle::from(Transform::from_xyz(0.0, -1.0, 0.0)))
+        .with_children(|p| {
+            p.spawn(TermTextBundle {
+                text: TermText::from("Spawn balls: spacebar"),
+                position: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
+                ..Default::default()
+            });
+            p.spawn(TermTextBundle {
+                text: TermText::from("       Exit: q or esc"),
+                position: TransformBundle::from(Transform::from_xyz(0.0, -1.0, 0.0)),
+                ..Default::default()
+            });
+        });
 }
 
 fn spawn_balls(mut input: EventReader<TermInput>, mut commands: Commands) {
