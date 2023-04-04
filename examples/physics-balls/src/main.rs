@@ -50,7 +50,7 @@ fn main() {
 fn create_scene(mut commands: Commands) {
     // Setup camera
     commands.spawn(TermCameraBundle {
-        position: TransformBundle::from(Transform::from_xyz(0.0, 10.0, 0.0)),
+        transform: TransformBundle::from(Transform::from_xyz(0.0, 10.0, 0.0)),
         ..Default::default()
     });
 
@@ -61,7 +61,7 @@ fn create_scene(mut commands: Commands) {
         .with_children(|p| {
             for i in -GROUND_SIZE..=GROUND_SIZE {
                 p.spawn(TermSpriteBundle {
-                    position: TransformBundle::from(Transform::from_xyz(i as f32, 0.0, 0.0)),
+                    transform: TransformBundle::from(Transform::from_xyz(i as f32, 0.0, 0.0)),
                     char: TermChar('-'),
                 });
             }
@@ -79,7 +79,7 @@ fn create_scene(mut commands: Commands) {
             .with_children(|p| {
                 for i in -WALL_SIZE..=WALL_SIZE {
                     p.spawn(TermSpriteBundle {
-                        position: TransformBundle::from(Transform::from_xyz(0.0, i as f32, 0.0)),
+                        transform: TransformBundle::from(Transform::from_xyz(0.0, i as f32, 0.0)),
                         char: TermChar('|'),
                     });
                 }
@@ -92,17 +92,17 @@ fn create_scene(mut commands: Commands) {
         .with_children(|p| {
             p.spawn(TermTextBundle {
                 text: TermText::from("        Move camera: ↑ ↓ ← →"),
-                position: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
+                transform: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
                 ..Default::default()
             });
             p.spawn(TermTextBundle {
                 text: TermText::from("Spawn balls: spacebar"),
-                position: TransformBundle::from(Transform::from_xyz(0.0, -1.0, 0.0)),
+                transform: TransformBundle::from(Transform::from_xyz(0.0, -1.0, 0.0)),
                 ..Default::default()
             });
             p.spawn(TermTextBundle {
                 text: TermText::from(" Exit: q"),
-                position: TransformBundle::from(Transform::from_xyz(0.0, -2.0, 0.0)),
+                transform: TransformBundle::from(Transform::from_xyz(0.0, -2.0, 0.0)),
                 ..Default::default()
             });
         });
@@ -123,7 +123,7 @@ fn spawn_balls(mut input: EventReader<TermInput>, mut commands: Commands) {
                 .insert(Collider::ball(1.0))
                 .insert(Restitution::coefficient(1.1))
                 .insert(TermSpriteBundle {
-                    position: TransformBundle::from(Transform::from_xyz(rx, ry, 0.0)),
+                    transform: TransformBundle::from(Transform::from_xyz(rx, ry, 0.0)),
                     char: TermChar(btype),
                 });
         }

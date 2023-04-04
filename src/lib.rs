@@ -55,14 +55,14 @@ pub struct TermSpriteBundle {
     pub char: TermChar,
 
     #[bundle]
-    pub position: TransformBundle,
+    pub transform: TransformBundle,
 }
 
 impl Default for TermSpriteBundle {
     fn default() -> Self {
         Self {
             char: TermChar('?'),
-            position: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
+            transform: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
         }
     }
 }
@@ -73,7 +73,7 @@ pub struct TermTextBundle {
     pub align: TermTextAlign,
 
     #[bundle]
-    pub position: TransformBundle,
+    pub transform: TransformBundle,
 }
 
 impl Default for TermTextBundle {
@@ -81,7 +81,7 @@ impl Default for TermTextBundle {
         Self {
             text: TermText::from("?"),
             align: TermTextAlign::CENTER,
-            position: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
+            transform: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
         }
     }
 }
@@ -97,14 +97,14 @@ pub struct TermCameraBundle {
     pub camera: TermCamera,
 
     #[bundle]
-    pub position: TransformBundle,
+    pub transform: TransformBundle,
 }
 
 impl Default for TermCameraBundle {
     fn default() -> Self {
         Self {
             camera: TermCamera,
-            position: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
+            transform: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
         }
     }
 }

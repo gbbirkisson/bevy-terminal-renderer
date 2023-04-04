@@ -10,6 +10,10 @@ This project is a terminal renderer for the amazing [bevy game engine](https://b
 
 Take a look at the [examples](./examples) to get some ideas!
 
+#### [Example: Spinning diamond](./examples/spinning-diamond)
+
+<a href="https://github.com/gbbirkisson/bevy-terminal-renderer/tree/main/examples/spinning-diamond"><img src="https://raw.githubusercontent.com/gbbirkisson/bevy-terminal-renderer/main/examples/spinning-diamond/demo.gif"></a>
+
 #### [Example: Using a physics engine](./examples/physics-balls)
 
 <a href="https://github.com/gbbirkisson/bevy-terminal-renderer/tree/main/examples/physics-balls"><img src="https://raw.githubusercontent.com/gbbirkisson/bevy-terminal-renderer/main/examples/physics-balls/demo.gif"></a>
