@@ -1,0 +1,6 @@
+/target
+
+# Example files
+/examples/**/*.log
+/examples/**/Cargo.lock
+/examples/**/target

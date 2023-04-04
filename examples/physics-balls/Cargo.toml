@@ -1,0 +1,12 @@
+[package]
+name = "physics-balls"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = { version = "0.10.1", default-features = false }
+bevy-terminal-renderer = { path = "../../" }
+bevy_rapier2d = "0.21.0"
+rand = "0.8.5"
+tracing-appender = "0.2.2"
+tracing-subscriber = "0.3.16"

@@ -1,0 +1,8 @@
+[package]
+name = "bevy-terminal-renderer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = { version = "0.10.1", default-features = false }
+pancurses = { version = "0.17.0", features = ["wide"] }
