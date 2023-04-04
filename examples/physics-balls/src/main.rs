@@ -7,8 +7,17 @@ use bevy_terminal_renderer::*;
 const GROUND_SIZE: isize = 20;
 const WALL_SIZE: isize = 5;
 
-const NR_BALL_TYPES: usize = 7;
-const BALLS: [char; NR_BALL_TYPES] = ['🔴', '🔵', '🟢', '🟡', '🟠', '🟣', '🟤'];
+const NR_BALL_TYPES: usize = 3;
+const BALLS: [char; NR_BALL_TYPES] = ['0', 'O', '*'];
+const WIDE: bool = false;
+
+// Uncomment to use emojis
+// const NR_BALL_TYPES: usize = 7;
+// const BALLS: [char; NR_BALL_TYPES] = ['🔴', '🔵', '🟢', '🟡', '🟠', '🟣', '🟤'];
+// const WIDE: bool = true;
+
+#[derive(Component)]
+pub struct Ball;
 
 fn main() {
     // Initialize tracing_subscriber to write to a file
@@ -21,7 +30,7 @@ fn main() {
             1.0 / 60.0, // Run at 60 fps
         )))
         .add_plugins(MinimalPlugins)
-        .add_plugin(TermPlugin::wide(true))
+        .add_plugin(TermPlugin::wide(WIDE))
         .add_plugin(TransformPlugin) // This is needed to update global transforms
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(1.0))
         .add_startup_system(create_scene)
@@ -88,7 +97,7 @@ fn create_scene(mut commands: Commands) {
                 ..Default::default()
             });
             p.spawn(TermTextBundle {
-                text: TermText::from("       Exit: q or esc"),
+                text: TermText::from(" Exit: q"),
                 position: TransformBundle::from(Transform::from_xyz(0.0, -2.0, 0.0)),
                 ..Default::default()
             });
@@ -105,7 +114,8 @@ fn spawn_balls(mut input: EventReader<TermInput>, mut commands: Commands) {
                 let ry = ((WALL_SIZE * 3) + rng.gen_range(0..=WALL_SIZE)) as f32;
                 let btype = BALLS[rng.gen_range(0..NR_BALL_TYPES)];
                 commands
-                    .spawn(RigidBody::Dynamic)
+                    .spawn(Ball)
+                    .insert(RigidBody::Dynamic)
                     .insert(Collider::ball(1.0))
                     .insert(Restitution::coefficient(1.1))
                     .insert(TermSpriteBundle {
@@ -119,9 +129,9 @@ fn spawn_balls(mut input: EventReader<TermInput>, mut commands: Commands) {
     }
 }
 
-fn despawn_balls(mut commands: Commands, query: Query<(Entity, &GlobalTransform)>) {
+fn despawn_balls(mut commands: Commands, query: Query<(Entity, &GlobalTransform, With<Ball>)>) {
     // Despawn balls that fall off the screen
-    for (entity, transform) in query.iter() {
+    for (entity, transform, _) in query.iter() {
         if transform.translation().y < -20.0 {
             commands.entity(entity).despawn_recursive();
         }
@@ -160,9 +170,6 @@ fn exit_control(mut input: EventReader<TermInput>, mut command: EventWriter<Term
     // Exit when escape or q is pressed
     for i in input.iter() {
         match i {
-            TermInput::Escape => {
-                command.send(TermCommand::Exit);
-            }
             TermInput::Character(c) if c == &'q' => {
                 command.send(TermCommand::Exit);
             }

@@ -357,8 +357,8 @@ fn handle_terminal(
             let camera_x = camera.translation().x.round() as isize;
             let camera_y = camera.translation().y.round() as isize;
 
-            let camera_offset_x = (-camera_x + c as isize) / 2;
-            let camera_offset_y = (camera_y + r as isize) / 2;
+            let camera_offset_x = (-camera_x + (c as isize)) / 2;
+            let camera_offset_y = (camera_y + (r as isize)) / 2;
 
             (camera_offset_x, camera_offset_y)
         }
@@ -410,17 +410,23 @@ fn handle_terminal(
             TermTextAlign::RIGHT => x - text_len as isize,
         };
 
-        if (x < 0 && x + (text_len as isize) < 0) || y < 0 || y > (r as isize) {
-            // No part of this text is in view
+        if x + (text_len as isize) < 0 || y < 0 {
+            // This string is not in view
             continue;
         }
 
         let x = x as usize;
         let y = y as usize;
 
+        if x > c || y > r {
+            // This string is not in view
+            continue;
+        }
+
         for (i, char) in text.chars().enumerate() {
             let x = x + i;
-            if x < c {
+
+            if x < c && y < r {
                 let (_, oldz) = buffer[x][y];
                 if z >= oldz {
                     buffer[x][y] = (char, z);
