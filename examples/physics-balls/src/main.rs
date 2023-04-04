@@ -6,6 +6,7 @@ use bevy_terminal_renderer::*;
 
 const GROUND_SIZE: isize = 20;
 const WALL_SIZE: isize = 5;
+const CAMERA_SPEED: f32 = 3.0;
 
 const NR_BALL_TYPES: usize = 3;
 const BALLS: [char; NR_BALL_TYPES] = ['0', 'O', '*'];
@@ -107,24 +108,21 @@ fn create_scene(mut commands: Commands) {
 fn spawn_balls(mut input: EventReader<TermInput>, mut commands: Commands) {
     // Spawn balls when spacebar is pressed
     for i in input.iter() {
-        match i {
-            TermInput::SpaceBar => {
-                let mut rng = rand::thread_rng();
-                let rx = (rng.gen_range(-GROUND_SIZE..=GROUND_SIZE) / 2) as f32;
-                let ry = ((WALL_SIZE * 3) + rng.gen_range(0..=WALL_SIZE)) as f32;
-                let btype = BALLS[rng.gen_range(0..NR_BALL_TYPES)];
-                commands
-                    .spawn(Ball)
-                    .insert(RigidBody::Dynamic)
-                    .insert(Collider::ball(1.0))
-                    .insert(Restitution::coefficient(1.1))
-                    .insert(TermSpriteBundle {
-                        position: TransformBundle::from(Transform::from_xyz(rx, ry, 0.0)),
-                        char: TermChar(btype),
-                        ..Default::default()
-                    });
-            }
-            _ => {}
+        if let TermInput::SpaceBar = i {
+            let mut rng = rand::thread_rng();
+            let rx = (rng.gen_range(-GROUND_SIZE..=GROUND_SIZE) / 2) as f32;
+            let ry = ((WALL_SIZE * 3) + rng.gen_range(0..=WALL_SIZE)) as f32;
+            let btype = BALLS[rng.gen_range(0..NR_BALL_TYPES)];
+            commands
+                .spawn(Ball)
+                .insert(RigidBody::Dynamic)
+                .insert(Collider::ball(1.0))
+                .insert(Restitution::coefficient(1.1))
+                .insert(TermSpriteBundle {
+                    position: TransformBundle::from(Transform::from_xyz(rx, ry, 0.0)),
+                    char: TermChar(btype),
+                    ..Default::default()
+                });
         }
     }
 }
@@ -150,16 +148,16 @@ fn camera_control(
     for i in input.iter() {
         match i {
             TermInput::Left => {
-                camera.translation -= Vec3::X * 2.0;
+                camera.translation -= Vec3::X * CAMERA_SPEED;
             }
             TermInput::Right => {
-                camera.translation += Vec3::X * 2.0;
+                camera.translation += Vec3::X * CAMERA_SPEED;
             }
             TermInput::Up => {
-                camera.translation += Vec3::Y;
+                camera.translation += Vec3::Y * CAMERA_SPEED;
             }
             TermInput::Down => {
-                camera.translation -= Vec3::Y;
+                camera.translation -= Vec3::Y * CAMERA_SPEED;
             }
             _ => {}
         }

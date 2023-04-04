@@ -194,6 +194,7 @@ fn create_terminal(mut commands: Commands, context: Res<TermContext>) {
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn handle_terminal(
     terminal: Query<&Term>,
     mut terminal_size: Query<&mut TermSize>,
@@ -217,6 +218,7 @@ fn handle_terminal(
     let mut resize = false;
 
     // Look for commands for the terminal
+    #[allow(clippy::never_loop)]
     for ev in ev_cmd.iter() {
         match ev {
             TermCommand::Exit => {
@@ -335,7 +337,7 @@ fn handle_terminal(
         window.erase();
     }
 
-    let (c, r) = get_window_size(&window);
+    let (c, r) = get_window_size(window);
 
     // Update terminal size
     terminal_size.0 = c;
@@ -436,6 +438,7 @@ fn handle_terminal(
     }
 
     // Draw buffer
+    #[allow(clippy::needless_range_loop)]
     for x in 0..c {
         for y in 0..r {
             window.mvaddstr(y as i32, x as i32, format!("{}", buffer[x][y].0));
