@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use bevy::app::AppExit;
 use bevy::prelude::*;
 
@@ -10,17 +8,20 @@ use pancurses::{
 
 #[derive(Component)]
 struct Term {
-    window: Arc<Window>,
+    window: Window,
     wide: bool,
 }
+
+// Window cannot be passed between threads, but there is only ever 1 thread at a time that uses it
+// at a time. Because there is only 1 system that uses it. I have no idea if this is a good idea or
+// not, but it works on my machine :D
+unsafe impl Send for Term {}
+unsafe impl Sync for Term {}
 
 #[derive(Resource)]
 struct TermContext {
     wide: bool,
 }
-
-unsafe impl Send for Term {}
-unsafe impl Sync for Term {}
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 #[system_set(base)]
@@ -82,7 +83,7 @@ pub struct TermTextBundle {
 impl Default for TermTextBundle {
     fn default() -> Self {
         Self {
-            text: TermText("?".to_string()),
+            text: TermText::from("?"),
             align: TermTextAlign::CENTER,
             z: TermZBuffer(0),
             position: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
@@ -178,6 +179,7 @@ impl Plugin for TermPlugin {
 fn create_terminal(mut commands: Commands, context: Res<TermContext>) {
     let window = initscr();
 
+    // Configure window
     nl();
     noecho();
     curs_set(0);
@@ -185,11 +187,11 @@ fn create_terminal(mut commands: Commands, context: Res<TermContext>) {
     window.keypad(true);
     mousemask(ALL_MOUSE_EVENTS, None);
 
-    let (x, y) = get_window_size(&window);
-
+    // Create components
+    let (x, y) = get_window_size(&window, context.wide);
     commands.spawn(TermSize(x, y));
     commands.spawn(Term {
-        window: Arc::new(window),
+        window,
         wide: context.wide,
     });
 }
@@ -205,7 +207,7 @@ fn handle_terminal(
     mut exit: EventWriter<AppExit>,
     mut ev_cmd: EventReader<TermCommand>,
 ) {
-    // Get our window
+    // Get our data
     let terminal = terminal
         .get_single()
         .expect("We should always have a terminal");
@@ -230,104 +232,13 @@ fn handle_terminal(
         }
     }
 
-    // Send events
+    // Handle events
     if let Some(ev) = terminal.window.getch() {
         match ev {
-            Input::KeyBackspace => {
-                ev_input.send(TermInput::BackSpace);
-            }
-            Input::Character(c) if c == ' ' => {
-                ev_input.send(TermInput::SpaceBar);
-            }
-            Input::Character(c) if c == '\n' => {
-                ev_input.send(TermInput::Enter);
-            }
-            Input::Character(c) if c == '\t' => {
-                ev_input.send(TermInput::Tab);
-            }
-            Input::Character(c) if c == '\u{1b}' => {
-                ev_input.send(TermInput::Escape);
-            }
-            Input::Character(c) => {
-                ev_input.send(TermInput::Character(c));
-            }
-            Input::KeyMouse => {
-                if let Ok(mouse_event) = getmouse() {
-                    ev_input.send(TermInput::Mouse(mouse_event.x, mouse_event.y));
-                };
-            }
             Input::KeyResize => {
                 resize = true;
             }
-            Input::KeyLeft => {
-                ev_input.send(TermInput::Left);
-            }
-            Input::KeyRight => {
-                ev_input.send(TermInput::Right);
-            }
-            Input::KeyUp => {
-                ev_input.send(TermInput::Up);
-            }
-            Input::KeyDown => {
-                ev_input.send(TermInput::Down);
-            }
-            Input::KeyHome => {
-                ev_input.send(TermInput::Home);
-            }
-            Input::KeyEnd => {
-                ev_input.send(TermInput::End);
-            }
-            Input::KeyIC => {
-                ev_input.send(TermInput::Insert);
-            }
-            Input::KeyDC => {
-                ev_input.send(TermInput::Delete);
-            }
-            Input::KeyPPage => {
-                ev_input.send(TermInput::PageUp);
-            }
-            Input::KeyNPage => {
-                ev_input.send(TermInput::PageDown);
-            }
-            Input::KeyF1 => {
-                ev_input.send(TermInput::F1);
-            }
-            Input::KeyF2 => {
-                ev_input.send(TermInput::F2);
-            }
-            Input::KeyF3 => {
-                ev_input.send(TermInput::F3);
-            }
-            Input::KeyF4 => {
-                ev_input.send(TermInput::F4);
-            }
-            Input::KeyF5 => {
-                ev_input.send(TermInput::F5);
-            }
-            Input::KeyF6 => {
-                ev_input.send(TermInput::F6);
-            }
-            Input::KeyF7 => {
-                ev_input.send(TermInput::F7);
-            }
-            Input::KeyF8 => {
-                ev_input.send(TermInput::F8);
-            }
-            Input::KeyF9 => {
-                ev_input.send(TermInput::F9);
-            }
-            Input::KeyF10 => {
-                ev_input.send(TermInput::F10);
-            }
-            Input::KeyF11 => {
-                ev_input.send(TermInput::F11);
-            }
-            Input::KeyF12 => {
-                ev_input.send(TermInput::F12);
-            }
-            _ => {
-                warn!("Unknown input: {:?}", ev);
-            }
+            _ => map_and_send_events(ev, &mut ev_input),
         }
     }
 
@@ -337,7 +248,7 @@ fn handle_terminal(
         window.erase();
     }
 
-    let (c, r) = get_window_size(window);
+    let (c, r) = get_window_size(window, wide);
 
     // Update terminal size
     terminal_size.0 = c;
@@ -348,11 +259,7 @@ fn handle_terminal(
     let r = r as usize;
     let mut buffer = vec![vec![(' ', isize::MIN); r]; c];
 
-    // Print resize
-    if resize {
-        info!("New terminal size: {}, {}", c, r);
-    }
-
+    // Calculate camera offset
     let (camera_offset_x, camera_offset_y) = match camera.get_single() {
         Err(_) => (0, 0),
         Ok(camera) => {
@@ -441,11 +348,110 @@ fn handle_terminal(
     #[allow(clippy::needless_range_loop)]
     for x in 0..c {
         for y in 0..r {
+            // Using the string method here to handle emojis
             window.mvaddstr(y as i32, x as i32, format!("{}", buffer[x][y].0));
         }
     }
 }
 
-fn get_window_size(window: &Window) -> (i32, i32) {
-    ((window.get_max_x() - 2), window.get_max_y())
+fn get_window_size(window: &Window, wide: bool) -> (i32, i32) {
+    let sub = if wide { 2 } else { 1 };
+    ((window.get_max_x() - sub), window.get_max_y())
+}
+
+fn map_and_send_events(ev: Input, ev_input: &mut EventWriter<TermInput>) {
+    match ev {
+        Input::KeyBackspace => {
+            ev_input.send(TermInput::BackSpace);
+        }
+        Input::Character(c) if c == ' ' => {
+            ev_input.send(TermInput::SpaceBar);
+        }
+        Input::Character(c) if c == '\n' => {
+            ev_input.send(TermInput::Enter);
+        }
+        Input::Character(c) if c == '\t' => {
+            ev_input.send(TermInput::Tab);
+        }
+        Input::Character(c) if c == '\u{1b}' => {
+            ev_input.send(TermInput::Escape);
+        }
+        Input::Character(c) => {
+            ev_input.send(TermInput::Character(c));
+        }
+        Input::KeyMouse => {
+            if let Ok(mouse_event) = getmouse() {
+                ev_input.send(TermInput::Mouse(mouse_event.x, mouse_event.y));
+            };
+        }
+        Input::KeyLeft => {
+            ev_input.send(TermInput::Left);
+        }
+        Input::KeyRight => {
+            ev_input.send(TermInput::Right);
+        }
+        Input::KeyUp => {
+            ev_input.send(TermInput::Up);
+        }
+        Input::KeyDown => {
+            ev_input.send(TermInput::Down);
+        }
+        Input::KeyHome => {
+            ev_input.send(TermInput::Home);
+        }
+        Input::KeyEnd => {
+            ev_input.send(TermInput::End);
+        }
+        Input::KeyIC => {
+            ev_input.send(TermInput::Insert);
+        }
+        Input::KeyDC => {
+            ev_input.send(TermInput::Delete);
+        }
+        Input::KeyPPage => {
+            ev_input.send(TermInput::PageUp);
+        }
+        Input::KeyNPage => {
+            ev_input.send(TermInput::PageDown);
+        }
+        Input::KeyF1 => {
+            ev_input.send(TermInput::F1);
+        }
+        Input::KeyF2 => {
+            ev_input.send(TermInput::F2);
+        }
+        Input::KeyF3 => {
+            ev_input.send(TermInput::F3);
+        }
+        Input::KeyF4 => {
+            ev_input.send(TermInput::F4);
+        }
+        Input::KeyF5 => {
+            ev_input.send(TermInput::F5);
+        }
+        Input::KeyF6 => {
+            ev_input.send(TermInput::F6);
+        }
+        Input::KeyF7 => {
+            ev_input.send(TermInput::F7);
+        }
+        Input::KeyF8 => {
+            ev_input.send(TermInput::F8);
+        }
+        Input::KeyF9 => {
+            ev_input.send(TermInput::F9);
+        }
+        Input::KeyF10 => {
+            ev_input.send(TermInput::F10);
+        }
+        Input::KeyF11 => {
+            ev_input.send(TermInput::F11);
+        }
+        Input::KeyF12 => {
+            ev_input.send(TermInput::F12);
+        }
+        _ => {
+            warn!("Unknown input: {:?}", ev);
+        }
+    }
 }

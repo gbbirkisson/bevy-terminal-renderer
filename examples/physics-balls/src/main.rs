@@ -6,7 +6,7 @@ use bevy_terminal_renderer::*;
 
 const GROUND_SIZE: isize = 20;
 const WALL_SIZE: isize = 5;
-const CAMERA_SPEED: f32 = 3.0;
+const CAMERA_SPEED: f32 = 10.0;
 
 const NR_BALL_TYPES: usize = 3;
 const BALLS: [char; NR_BALL_TYPES] = ['0', 'O', '*'];
@@ -25,15 +25,17 @@ fn main() {
     let file_appender = tracing_appender::rolling::never(".", "debug.log");
     tracing_subscriber::fmt().with_writer(file_appender).init();
 
-    // Initialize app
     App::new()
+        // Add bevy bare necessities
         .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs_f64(
             1.0 / 60.0, // Run at 60 fps
         )))
-        .add_plugins(MinimalPlugins)
-        .add_plugin(TermPlugin::wide(WIDE))
+        .add_plugins(MinimalPlugins) // The absolute basics
         .add_plugin(TransformPlugin) // This is needed to update global transforms
+        // Add our plugin and a physics engine
+        .add_plugin(TermPlugin::wide(WIDE))
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(1.0))
+        // Add our systems
         .add_startup_system(create_scene)
         .add_system(camera_control)
         .add_system(exit_control)
@@ -154,10 +156,10 @@ fn camera_control(
                 camera.translation += Vec3::X * CAMERA_SPEED;
             }
             TermInput::Up => {
-                camera.translation += Vec3::Y * CAMERA_SPEED;
+                camera.translation += Vec3::Y * CAMERA_SPEED / 2.0;
             }
             TermInput::Down => {
-                camera.translation -= Vec3::Y * CAMERA_SPEED;
+                camera.translation -= Vec3::Y * CAMERA_SPEED / 2.0;
             }
             _ => {}
         }
@@ -165,7 +167,7 @@ fn camera_control(
 }
 
 fn exit_control(mut input: EventReader<TermInput>, mut command: EventWriter<TermCommand>) {
-    // Exit when escape or q is pressed
+    // Exit when q is pressed
     for i in input.iter() {
         match i {
             TermInput::Character(c) if c == &'q' => {
