@@ -56,9 +56,12 @@ impl Default for TermSpriteBundle {
 #[derive(Component)]
 pub struct TermCamera;
 
+#[derive(Component)]
+pub struct TermSize(i32, i32);
+
 #[derive(Bundle)]
 pub struct TermCameraBundle {
-    pub camera: TermCamera, // TODO: Impl default
+    pub camera: TermCamera,
 
     #[bundle]
     pub position: TransformBundle,
@@ -83,7 +86,7 @@ pub enum TermInput {
     Up,
     Down,
 
-    Space,
+    SpaceBar,
     BackSpace,
     Enter,
     Tab,
@@ -146,6 +149,9 @@ fn create_terminal(mut commands: Commands, context: Res<TermContext>) {
     window.keypad(true);
     mousemask(ALL_MOUSE_EVENTS, None);
 
+    let (x, y) = get_window_size(&window);
+
+    commands.spawn(TermSize(x, y));
     commands.spawn(Term {
         window: Arc::new(window),
         wide: context.wide,
@@ -154,6 +160,7 @@ fn create_terminal(mut commands: Commands, context: Res<TermContext>) {
 
 fn handle_terminal(
     terminal: Query<&Term>,
+    mut terminal_size: Query<&mut TermSize>,
     camera: Query<&GlobalTransform, With<TermCamera>>,
     entities: Query<(&GlobalTransform, &TermChar, Option<&TermZBuffer>)>,
     mut ev_input: EventWriter<TermInput>,
@@ -163,6 +170,9 @@ fn handle_terminal(
     // Get our window
     let terminal = terminal
         .get_single()
+        .expect("We should always have a terminal");
+    let mut terminal_size = terminal_size
+        .get_single_mut()
         .expect("We should always have a terminal");
     let window = &terminal.window;
     let wide = terminal.wide;
@@ -188,7 +198,7 @@ fn handle_terminal(
                 ev_input.send(TermInput::BackSpace);
             }
             Input::Character(c) if c == ' ' => {
-                ev_input.send(TermInput::Space);
+                ev_input.send(TermInput::SpaceBar);
             }
             Input::Character(c) if c == '\n' => {
                 ev_input.send(TermInput::Enter);
@@ -288,9 +298,15 @@ fn handle_terminal(
         window.erase();
     }
 
+    let (c, r) = get_window_size(&window);
+
+    // Update terminal size
+    terminal_size.0 = c;
+    terminal_size.1 = r;
+
     // Prepare drawing
-    let c: usize = (window.get_max_x() - 2) as usize;
-    let r: usize = (window.get_max_y()) as usize;
+    let c = c as usize;
+    let r = r as usize;
     let mut buffer = vec![vec![(' ', isize::MIN); r]; c];
 
     // Print resize
@@ -338,4 +354,8 @@ fn handle_terminal(
             window.mvaddstr(y as i32, x as i32, format!("{}", buffer[x][y].0));
         }
     }
+}
+
+fn get_window_size(window: &Window) -> (i32, i32) {
+    ((window.get_max_x() - 2), window.get_max_y())
 }
