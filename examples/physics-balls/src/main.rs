@@ -2,9 +2,7 @@ use bevy::{app::ScheduleRunnerSettings, prelude::*, utils::Duration};
 use bevy_rapier2d::prelude::*;
 use rand::Rng;
 
-use bevy_terminal_renderer::{
-    TerminalPlugin, Camera, CameraBundle, Char, TerminalBundle, TerminalCommand, TerminalInput, ZBuffer,
-};
+use bevy_terminal_renderer::*;
 
 fn main() {
     // Initialize tracing_subscriber to write to a file
@@ -16,7 +14,7 @@ fn main() {
             1.0 / 60.0,
         )))
         .add_plugins(MinimalPlugins)
-        .add_plugin(TerminalPlugin::wide(true))
+        .add_plugin(TermPlugin::wide(true))
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(1.0))
         .add_startup_system(create_entities)
         .add_system(controls)
@@ -29,9 +27,10 @@ const GROUND_SIZE: isize = 50;
 const WALL_SIZE: isize = 10;
 
 fn create_entities(mut commands: Commands) {
-    commands.spawn(CameraBundle {
-        position: TransformBundle::from(Transform::from_xyz(0.0, 20.0, 0.0)),
-        camera: Camera,
+    // Setup camera
+    commands.spawn(TermCameraBundle {
+        position: TransformBundle::from(Transform::from_xyz(0.0, 30.0, 0.0)),
+        ..Default::default()
     });
 
     // Create ground
@@ -40,10 +39,10 @@ fn create_entities(mut commands: Commands) {
         .insert(TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)))
         .with_children(|p| {
             for i in -GROUND_SIZE..=GROUND_SIZE {
-                p.spawn(TerminalBundle {
+                p.spawn(TermSpriteBundle {
                     position: TransformBundle::from(Transform::from_xyz(i as f32, 0.0, 0.0)),
-                    char: Char('-'),
-                    z: ZBuffer(1),
+                    char: TermChar('-'),
+                    z: TermZBuffer(1),
                 });
             }
         });
@@ -59,47 +58,20 @@ fn create_entities(mut commands: Commands) {
             )))
             .with_children(|p| {
                 for i in -WALL_SIZE..=WALL_SIZE {
-                    p.spawn(TerminalBundle {
+                    p.spawn(TermSpriteBundle {
                         position: TransformBundle::from(Transform::from_xyz(0.0, i as f32, 0.0)),
-                        char: Char('|'),
-                        z: ZBuffer(1),
+                        char: TermChar('|'),
+                        z: TermZBuffer(1),
                     });
                 }
             });
     }
-
-    // // Create ball
-    // commands
-    //     .spawn(RigidBody::Dynamic)
-    //     .insert(Collider::ball(1.0))
-    //     .insert(Restitution::coefficient(1.5))
-    //     .insert(TerminalBundle {
-    //         position: TransformBundle::from(Transform::from_xyz(-0.5, 20.0, 0.0)),
-    //         char: Char('⚽'),
-    //     });
-    //
-    // commands
-    //     .spawn(RigidBody::Dynamic)
-    //     .insert(Collider::ball(1.0))
-    //     .insert(Restitution::coefficient(1.5))
-    //     .insert(TerminalBundle {
-    //         position: TransformBundle::from(Transform::from_xyz(0.5, 30.0, 0.0)),
-    //         char: Char('⚽'),
-    //     });
-    // commands.spawn(TerminalBundle {
-    //     position: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
-    //     char: Char('\u{1F378}'),
-    // });
-    // commands.spawn(TerminalBundle {
-    //     position: TransformBundle::from(Transform::from_xyz(1.0, 0.0, 0.0)),
-    //     char: Char('\u{1F378}'),
-    // });
 }
 
-fn spawn_balls(mut input: EventReader<TerminalInput>, mut commands: Commands) {
+fn spawn_balls(mut input: EventReader<TermInput>, mut commands: Commands) {
     for i in input.iter() {
         match i {
-            TerminalInput::Space => {
+            TermInput::Space => {
                 let mut rng = rand::thread_rng();
                 let rx = (rng.gen_range(-GROUND_SIZE..=GROUND_SIZE) / 2) as f32;
                 let ry = ((WALL_SIZE * 3) + rng.gen_range(0..=WALL_SIZE)) as f32;
@@ -107,9 +79,9 @@ fn spawn_balls(mut input: EventReader<TerminalInput>, mut commands: Commands) {
                     .spawn(RigidBody::Dynamic)
                     .insert(Collider::ball(1.0))
                     .insert(Restitution::coefficient(1.2))
-                    .insert(TerminalBundle {
+                    .insert(TermSpriteBundle {
                         position: TransformBundle::from(Transform::from_xyz(rx, ry, 0.0)),
-                        char: Char('🔴'),
+                        char: TermChar('🔴'),
                         ..Default::default()
                     });
             }
@@ -119,9 +91,9 @@ fn spawn_balls(mut input: EventReader<TerminalInput>, mut commands: Commands) {
 }
 
 fn controls(
-    mut input: EventReader<TerminalInput>,
-    mut command: EventWriter<TerminalCommand>,
-    mut camera: Query<&mut Transform, With<Camera>>,
+    mut input: EventReader<TermInput>,
+    mut command: EventWriter<TermCommand>,
+    mut camera: Query<&mut Transform, With<TermCamera>>,
 ) {
     let mut camera = camera
         .get_single_mut()
@@ -129,22 +101,22 @@ fn controls(
 
     for i in input.iter() {
         match i {
-            TerminalInput::Escape => {
-                command.send(TerminalCommand::Exit);
+            TermInput::Escape => {
+                command.send(TermCommand::Exit);
             }
-            TerminalInput::Character(c) if c == &'q' => {
-                command.send(TerminalCommand::Exit);
+            TermInput::Character(c) if c == &'q' => {
+                command.send(TermCommand::Exit);
             }
-            TerminalInput::Left => {
+            TermInput::Left => {
                 camera.translation -= Vec3::X * 2.0;
             }
-            TerminalInput::Right => {
+            TermInput::Right => {
                 camera.translation += Vec3::X * 2.0;
             }
-            TerminalInput::Up => {
+            TermInput::Up => {
                 camera.translation += Vec3::Y;
             }
-            TerminalInput::Down => {
+            TermInput::Down => {
                 camera.translation -= Vec3::Y;
             }
             _ => {}

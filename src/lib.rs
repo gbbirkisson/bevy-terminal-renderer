@@ -9,63 +9,72 @@ use pancurses::{
 };
 
 #[derive(Component)]
-struct Terminal {
+struct Term {
     window: Arc<Window>,
     wide: bool,
 }
 
 #[derive(Resource)]
-struct TerminalContext {
+struct TermContext {
     wide: bool,
 }
 
-unsafe impl Send for Terminal {}
-unsafe impl Sync for Terminal {}
+unsafe impl Send for Term {}
+unsafe impl Sync for Term {}
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 #[system_set(base)]
-enum TerminalBaseSet {
+enum TermBaseSet {
     Handle,
 }
 
 #[derive(Component)]
-pub struct Char(pub char);
+pub struct TermChar(pub char);
 
 #[derive(Component)]
-pub struct ZBuffer(pub isize);
+pub struct TermZBuffer(pub isize);
 
 #[derive(Bundle)]
-pub struct TerminalBundle {
-    pub char: Char,
-    pub z: ZBuffer,
+pub struct TermSpriteBundle {
+    pub char: TermChar,
+    pub z: TermZBuffer,
 
     #[bundle]
     pub position: TransformBundle,
 }
 
-impl Default for TerminalBundle {
+impl Default for TermSpriteBundle {
     fn default() -> Self {
         Self {
-            char: Char('?'),
+            char: TermChar('?'),
             position: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
-            z: ZBuffer(0),
+            z: TermZBuffer(0),
         }
     }
 }
 
 #[derive(Component)]
-pub struct Camera;
+pub struct TermCamera;
 
 #[derive(Bundle)]
-pub struct CameraBundle {
-    pub camera: Camera,
+pub struct TermCameraBundle {
+    pub camera: TermCamera, // TODO: Impl default
 
     #[bundle]
     pub position: TransformBundle,
 }
 
+impl Default for TermCameraBundle {
+    fn default() -> Self {
+        Self {
+            camera: TermCamera,
+            position: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
+        }
+    }
+}
+
 #[derive(Debug)]
-pub enum TerminalInput {
+pub enum TermInput {
     Mouse(i32, i32),
     Character(char),
 
@@ -101,33 +110,33 @@ pub enum TerminalInput {
     F12,
 }
 
-pub enum TerminalCommand {
+pub enum TermCommand {
     Exit,
 }
 
-pub struct TerminalPlugin {
+pub struct TermPlugin {
     wide: bool,
 }
 
-impl TerminalPlugin {
+impl TermPlugin {
     pub fn wide(wide: bool) -> Self {
         Self { wide }
     }
 }
 
-impl Plugin for TerminalPlugin {
+impl Plugin for TermPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(TerminalContext { wide: self.wide })
-            .add_event::<TerminalInput>()
-            .add_event::<TerminalCommand>()
+        app.insert_resource(TermContext { wide: self.wide })
+            .add_event::<TermInput>()
+            .add_event::<TermCommand>()
             .add_plugin(TransformPlugin)
             .add_startup_system(create_terminal)
-            .add_system(handle_terminal.in_base_set(TerminalBaseSet::Handle))
-            .configure_set(TerminalBaseSet::Handle.before(CoreSet::PreUpdate));
+            .add_system(handle_terminal.in_base_set(TermBaseSet::Handle))
+            .configure_set(TermBaseSet::Handle.before(CoreSet::PreUpdate));
     }
 }
 
-fn create_terminal(mut commands: Commands, context: Res<TerminalContext>) {
+fn create_terminal(mut commands: Commands, context: Res<TermContext>) {
     let window = initscr();
 
     nl();
@@ -137,19 +146,19 @@ fn create_terminal(mut commands: Commands, context: Res<TerminalContext>) {
     window.keypad(true);
     mousemask(ALL_MOUSE_EVENTS, None);
 
-    commands.spawn(Terminal {
+    commands.spawn(Term {
         window: Arc::new(window),
         wide: context.wide,
     });
 }
 
 fn handle_terminal(
-    terminal: Query<&Terminal>,
-    camera: Query<&GlobalTransform, With<Camera>>,
-    entities: Query<(&GlobalTransform, &Char, Option<&ZBuffer>)>,
-    mut ev_input: EventWriter<TerminalInput>,
+    terminal: Query<&Term>,
+    camera: Query<&GlobalTransform, With<TermCamera>>,
+    entities: Query<(&GlobalTransform, &TermChar, Option<&TermZBuffer>)>,
+    mut ev_input: EventWriter<TermInput>,
     mut exit: EventWriter<AppExit>,
-    mut ev_cmd: EventReader<TerminalCommand>,
+    mut ev_cmd: EventReader<TermCommand>,
 ) {
     // Get our window
     let terminal = terminal
@@ -163,7 +172,7 @@ fn handle_terminal(
     // Look for commands for the terminal
     for ev in ev_cmd.iter() {
         match ev {
-            TerminalCommand::Exit => {
+            TermCommand::Exit => {
                 curs_set(1);
                 endwin();
                 exit.send(AppExit);
@@ -176,96 +185,96 @@ fn handle_terminal(
     if let Some(ev) = terminal.window.getch() {
         match ev {
             Input::KeyBackspace => {
-                ev_input.send(TerminalInput::BackSpace);
+                ev_input.send(TermInput::BackSpace);
             }
             Input::Character(c) if c == ' ' => {
-                ev_input.send(TerminalInput::Space);
+                ev_input.send(TermInput::Space);
             }
             Input::Character(c) if c == '\n' => {
-                ev_input.send(TerminalInput::Enter);
+                ev_input.send(TermInput::Enter);
             }
             Input::Character(c) if c == '\t' => {
-                ev_input.send(TerminalInput::Tab);
+                ev_input.send(TermInput::Tab);
             }
             Input::Character(c) if c == '\u{1b}' => {
-                ev_input.send(TerminalInput::Escape);
+                ev_input.send(TermInput::Escape);
             }
             Input::Character(c) => {
-                ev_input.send(TerminalInput::Character(c));
+                ev_input.send(TermInput::Character(c));
             }
             Input::KeyMouse => {
                 if let Ok(mouse_event) = getmouse() {
-                    ev_input.send(TerminalInput::Mouse(mouse_event.x, mouse_event.y));
+                    ev_input.send(TermInput::Mouse(mouse_event.x, mouse_event.y));
                 };
             }
             Input::KeyResize => {
                 resize = true;
             }
             Input::KeyLeft => {
-                ev_input.send(TerminalInput::Left);
+                ev_input.send(TermInput::Left);
             }
             Input::KeyRight => {
-                ev_input.send(TerminalInput::Right);
+                ev_input.send(TermInput::Right);
             }
             Input::KeyUp => {
-                ev_input.send(TerminalInput::Up);
+                ev_input.send(TermInput::Up);
             }
             Input::KeyDown => {
-                ev_input.send(TerminalInput::Down);
+                ev_input.send(TermInput::Down);
             }
             Input::KeyHome => {
-                ev_input.send(TerminalInput::Home);
+                ev_input.send(TermInput::Home);
             }
             Input::KeyEnd => {
-                ev_input.send(TerminalInput::End);
+                ev_input.send(TermInput::End);
             }
             Input::KeyIC => {
-                ev_input.send(TerminalInput::Insert);
+                ev_input.send(TermInput::Insert);
             }
             Input::KeyDC => {
-                ev_input.send(TerminalInput::Delete);
+                ev_input.send(TermInput::Delete);
             }
             Input::KeyPPage => {
-                ev_input.send(TerminalInput::PageUp);
+                ev_input.send(TermInput::PageUp);
             }
             Input::KeyNPage => {
-                ev_input.send(TerminalInput::PageDown);
+                ev_input.send(TermInput::PageDown);
             }
             Input::KeyF1 => {
-                ev_input.send(TerminalInput::F1);
+                ev_input.send(TermInput::F1);
             }
             Input::KeyF2 => {
-                ev_input.send(TerminalInput::F2);
+                ev_input.send(TermInput::F2);
             }
             Input::KeyF3 => {
-                ev_input.send(TerminalInput::F3);
+                ev_input.send(TermInput::F3);
             }
             Input::KeyF4 => {
-                ev_input.send(TerminalInput::F4);
+                ev_input.send(TermInput::F4);
             }
             Input::KeyF5 => {
-                ev_input.send(TerminalInput::F5);
+                ev_input.send(TermInput::F5);
             }
             Input::KeyF6 => {
-                ev_input.send(TerminalInput::F6);
+                ev_input.send(TermInput::F6);
             }
             Input::KeyF7 => {
-                ev_input.send(TerminalInput::F7);
+                ev_input.send(TermInput::F7);
             }
             Input::KeyF8 => {
-                ev_input.send(TerminalInput::F8);
+                ev_input.send(TermInput::F8);
             }
             Input::KeyF9 => {
-                ev_input.send(TerminalInput::F9);
+                ev_input.send(TermInput::F9);
             }
             Input::KeyF10 => {
-                ev_input.send(TerminalInput::F10);
+                ev_input.send(TermInput::F10);
             }
             Input::KeyF11 => {
-                ev_input.send(TerminalInput::F11);
+                ev_input.send(TermInput::F11);
             }
             Input::KeyF12 => {
-                ev_input.send(TerminalInput::F12);
+                ev_input.send(TermInput::F12);
             }
             _ => {
                 warn!("Unknown input: {:?}", ev);
