@@ -1,6 +1,15 @@
-<img align="right" width="128" height="128" src="logo.png">
+<h1>
+  <p align="center">
+    <a href="https://github.com/gbbirkisson/bevy-terminal-renderer">
+      <img src="logo.png" alt="Logo" height="128">
+    </a>
+    <br>bevy-terminal-renderer
+  </p>
+</h1>
 
-<h1>bevy-terminal-renderer</h1>
+<p align="center">
+  Write <b>bevy</b> games for the terminal
+</p>
 
 This project is a terminal renderer for the amazing [bevy game engine](https://bevyengine.org/). It allows you render your games/simulations using a terminal. Why would anybody do this? Well, I wanted to get more familiar with bevy and I like the terminal, so why not. This is a small hobby project of mine, and will not be actively maintained.
 

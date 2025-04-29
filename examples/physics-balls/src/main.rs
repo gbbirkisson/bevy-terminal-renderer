@@ -1,4 +1,4 @@
-use bevy::{app::ScheduleRunnerSettings, prelude::*, utils::Duration};
+use bevy::prelude::*;
 use bevy_rapier2d::prelude::*;
 use rand::Rng;
 
@@ -26,42 +26,38 @@ fn main() {
     tracing_subscriber::fmt().with_writer(file_appender).init();
 
     App::new()
-        // Add bevy bare necessities
-        .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs_f64(
-            1.0 / 60.0, // Run at 60 fps
-        )))
         .add_plugins(MinimalPlugins) // The absolute basics
-        .add_plugin(TransformPlugin) // This is needed to update global transforms
+        .add_plugins(TransformPlugin) // This is needed to update global transforms
         // Add our plugin and a physics engine
-        .add_plugin(TermPlugin {
+        .add_plugins(TermPlugin {
             wide: WIDE,
             ..Default::default()
         })
-        .add_plugin(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(1.0))
+        // .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(1.0))
         // Add our systems
-        .add_startup_system(create_scene)
-        .add_system(camera_control)
-        .add_system(exit_control)
-        .add_system(spawn_balls)
-        .add_system(despawn_balls)
+        .add_systems(Startup, create_scene)
+        .add_systems(
+            Update,
+            (camera_control, exit_control, spawn_balls, despawn_balls),
+        )
         .run();
 }
 
 fn create_scene(mut commands: Commands) {
     // Setup camera
     commands.spawn(TermCameraBundle {
-        transform: TransformBundle::from(Transform::from_xyz(0.0, 10.0, 0.0)),
+        transform: Transform::from_xyz(0.0, 10.0, 0.0),
         ..Default::default()
     });
 
     // Create ground
     commands
-        .spawn(Collider::cuboid(GROUND_SIZE as f32, 1.0))
-        .insert(TransformBundle::from(Transform::from_xyz(0.0, 0.0, 1.0)))
+        // .spawn(Collider::cuboid(GROUND_SIZE as f32, 1.0))
+        .spawn(Transform::from_xyz(0.0, 0.0, 1.0))
         .with_children(|p| {
             for i in -GROUND_SIZE..=GROUND_SIZE {
                 p.spawn(TermSpriteBundle {
-                    transform: TransformBundle::from(Transform::from_xyz(i as f32, 0.0, 0.0)),
+                    transform: Transform::from_xyz(i as f32, 0.0, 0.0),
                     char: TermChar('-'),
                 });
             }
@@ -70,16 +66,12 @@ fn create_scene(mut commands: Commands) {
     // Create walls
     for i in [-GROUND_SIZE, GROUND_SIZE] {
         commands
-            .spawn(Collider::cuboid(1.0, WALL_SIZE as f32))
-            .insert(TransformBundle::from(Transform::from_xyz(
-                i as f32,
-                WALL_SIZE as f32,
-                1.0,
-            )))
+            //     .spawn(Collider::cuboid(1.0, WALL_SIZE as f32))
+            .spawn(Transform::from_xyz(i as f32, WALL_SIZE as f32, 1.0))
             .with_children(|p| {
                 for i in -WALL_SIZE..=WALL_SIZE {
                     p.spawn(TermSpriteBundle {
-                        transform: TransformBundle::from(Transform::from_xyz(0.0, i as f32, 0.0)),
+                        transform: Transform::from_xyz(0.0, i as f32, 0.0),
                         char: TermChar('|'),
                     });
                 }
@@ -88,21 +80,21 @@ fn create_scene(mut commands: Commands) {
 
     // Create text
     commands
-        .spawn(TransformBundle::from(Transform::from_xyz(0.0, -1.0, 0.0)))
+        .spawn(Transform::from_xyz(0.0, -1.0, 0.0))
         .with_children(|p| {
             p.spawn(TermTextBundle {
                 text: TermText::from("        Move camera: ↑ ↓ ← →"),
-                transform: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
+                transform: Transform::from_xyz(0.0, 0.0, 0.0),
                 ..Default::default()
             });
             p.spawn(TermTextBundle {
                 text: TermText::from("Spawn balls: spacebar"),
-                transform: TransformBundle::from(Transform::from_xyz(0.0, -1.0, 0.0)),
+                transform: Transform::from_xyz(0.0, -1.0, 0.0),
                 ..Default::default()
             });
             p.spawn(TermTextBundle {
                 text: TermText::from(" Exit: q"),
-                transform: TransformBundle::from(Transform::from_xyz(0.0, -2.0, 0.0)),
+                transform: Transform::from_xyz(0.0, -2.0, 0.0),
                 ..Default::default()
             });
         });
@@ -110,7 +102,7 @@ fn create_scene(mut commands: Commands) {
 
 fn spawn_balls(mut input: EventReader<TermInput>, mut commands: Commands) {
     // Spawn balls when spacebar is pressed
-    for i in input.iter() {
+    for i in input.read() {
         if let TermInput::SpaceBar = i {
             let mut rng = rand::thread_rng();
             let rx = (rng.gen_range(-GROUND_SIZE..=GROUND_SIZE) / 2) as f32;
@@ -119,22 +111,22 @@ fn spawn_balls(mut input: EventReader<TermInput>, mut commands: Commands) {
 
             commands
                 .spawn(Ball)
-                .insert(RigidBody::Dynamic)
-                .insert(Collider::ball(1.0))
-                .insert(Restitution::coefficient(1.1))
+                //     .insert(RigidBody::Dynamic)
+                //     .insert(Collider::ball(1.0))
+                //     .insert(Restitution::coefficient(1.1))
                 .insert(TermSpriteBundle {
-                    transform: TransformBundle::from(Transform::from_xyz(rx, ry, 0.0)),
+                    transform: Transform::from_xyz(rx, ry, 0.0),
                     char: TermChar(btype),
                 });
         }
     }
 }
 
-fn despawn_balls(mut commands: Commands, query: Query<(Entity, &GlobalTransform, With<Ball>)>) {
+fn despawn_balls(mut commands: Commands, query: Query<(Entity, &GlobalTransform), With<Ball>>) {
     // Despawn balls that fall off the screen
-    for (entity, transform, _) in query.iter() {
+    for (entity, transform) in query.iter() {
         if transform.translation().y < -20.0 {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 }
@@ -144,11 +136,9 @@ fn camera_control(
     mut camera: Query<&mut Transform, With<TermCamera>>,
 ) {
     // Move camera with arrow keys
-    let mut camera = camera
-        .get_single_mut()
-        .expect("We should always have a camera");
+    let mut camera = camera.single_mut().expect("We should always have a camera");
 
-    for i in input.iter() {
+    for i in input.read() {
         match i {
             TermInput::Left => {
                 camera.translation -= Vec3::X * CAMERA_SPEED;
@@ -169,12 +159,9 @@ fn camera_control(
 
 fn exit_control(mut input: EventReader<TermInput>, mut command: EventWriter<TermCommand>) {
     // Exit when q is pressed
-    for i in input.iter() {
-        match i {
-            TermInput::Character(c) if c == &'q' => {
-                command.send(TermCommand::Exit);
-            }
-            _ => {}
+    for i in input.read() {
+        if let TermInput::Character('q') = i {
+            command.write(TermCommand::Exit);
         }
     }
 }

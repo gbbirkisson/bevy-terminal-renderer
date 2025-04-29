@@ -1,21 +1,22 @@
 use bevy::app::AppExit;
 use bevy::prelude::*;
+use tracing::warn;
 
 use pancurses::{
     curs_set, endwin, getmouse, initscr, mousemask, nl, noecho, resize_term, Input, Window,
     ALL_MOUSE_EVENTS,
 };
 
-#[derive(Component)]
+#[derive(Resource)]
 struct Term {
     window: Window,
     wide: bool,
     minz: f32,
 }
 
-// Window cannot be passed between threads, but there is only ever 1 thread at a time that uses it
-// at a time. Because there is only 1 system that uses it. I have no idea if this is a good idea or
-// not, but it works on my machine :D
+// SAFETY: Window cannot be passed between threads, but there is only ever 1 thread that uses it at
+// a time. We just have to be careful with our system ordering. I have no idea if this is a good
+// idea or not, but it works on my machine :D
 unsafe impl Send for Term {}
 unsafe impl Sync for Term {}
 
@@ -23,12 +24,6 @@ unsafe impl Sync for Term {}
 struct TermContext {
     wide: bool,
     minz: f32,
-}
-
-#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
-#[system_set(base)]
-enum TermBaseSet {
-    Handle,
 }
 
 #[derive(Component)]
@@ -53,16 +48,14 @@ pub enum TermTextAlign {
 #[derive(Bundle)]
 pub struct TermSpriteBundle {
     pub char: TermChar,
-
-    #[bundle]
-    pub transform: TransformBundle,
+    pub transform: Transform,
 }
 
 impl Default for TermSpriteBundle {
     fn default() -> Self {
         Self {
             char: TermChar('?'),
-            transform: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
+            transform: Transform::from_xyz(0.0, 0.0, 0.0),
         }
     }
 }
@@ -71,9 +64,7 @@ impl Default for TermSpriteBundle {
 pub struct TermTextBundle {
     pub text: TermText,
     pub align: TermTextAlign,
-
-    #[bundle]
-    pub transform: TransformBundle,
+    pub transform: Transform,
 }
 
 impl Default for TermTextBundle {
@@ -81,7 +72,7 @@ impl Default for TermTextBundle {
         Self {
             text: TermText::from("?"),
             align: TermTextAlign::CENTER,
-            transform: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
+            transform: Transform::from_xyz(0.0, 0.0, 0.0),
         }
     }
 }
@@ -95,21 +86,19 @@ pub struct TermSize(i32, i32);
 #[derive(Bundle)]
 pub struct TermCameraBundle {
     pub camera: TermCamera,
-
-    #[bundle]
-    pub transform: TransformBundle,
+    pub transform: Transform,
 }
 
 impl Default for TermCameraBundle {
     fn default() -> Self {
         Self {
             camera: TermCamera,
-            transform: TransformBundle::from(Transform::from_xyz(0.0, 0.0, 0.0)),
+            transform: Transform::from_xyz(0.0, 0.0, 0.0),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Event)]
 pub enum TermInput {
     Mouse(i32, i32),
     Character(char),
@@ -146,6 +135,7 @@ pub enum TermInput {
     F12,
 }
 
+#[derive(Event)]
 pub enum TermCommand {
     Exit,
 }
@@ -172,9 +162,15 @@ impl Plugin for TermPlugin {
         })
         .add_event::<TermInput>()
         .add_event::<TermCommand>()
-        .add_startup_system(create_terminal)
-        .add_system(handle_terminal.in_base_set(TermBaseSet::Handle))
-        .configure_set(TermBaseSet::Handle.before(CoreSet::PreUpdate));
+        .add_systems(Startup, create_terminal)
+        .add_systems(PreUpdate, handle_terminal_events)
+        .add_systems(
+            PostUpdate,
+            (
+                handle_terminal_draw,
+                handle_terminal_commands.after(handle_terminal_draw),
+            ),
+        );
     }
 }
 
@@ -192,49 +188,19 @@ fn create_terminal(mut commands: Commands, context: Res<TermContext>) {
     // Create components
     let (x, y) = get_window_size(&window, context.wide);
     commands.spawn(TermSize(x, y));
-    commands.spawn(Term {
+    commands.insert_resource(Term {
         window,
         wide: context.wide,
         minz: context.minz,
     });
 }
 
-#[allow(clippy::too_many_arguments)]
-fn handle_terminal(
-    terminal: Query<&Term>,
+fn handle_terminal_events(
+    terminal: Res<Term>,
     mut terminal_size: Query<&mut TermSize>,
-    camera: Query<&GlobalTransform, With<TermCamera>>,
-    chars: Query<(&GlobalTransform, &TermChar)>,
-    texts: Query<(&GlobalTransform, &TermText, &TermTextAlign)>,
     mut ev_input: EventWriter<TermInput>,
-    mut exit: EventWriter<AppExit>,
-    mut ev_cmd: EventReader<TermCommand>,
 ) {
-    // Get our data
-    let terminal = terminal
-        .get_single()
-        .expect("We should always have a terminal");
-    let mut terminal_size = terminal_size
-        .get_single_mut()
-        .expect("We should always have a terminal");
-    let window = &terminal.window;
-    let wide = terminal.wide;
-    let minz = terminal.minz;
-
     let mut resize = false;
-
-    // Look for commands for the terminal
-    #[allow(clippy::never_loop)]
-    for ev in ev_cmd.iter() {
-        match ev {
-            TermCommand::Exit => {
-                curs_set(1);
-                endwin();
-                exit.send(AppExit);
-                return;
-            }
-        }
-    }
 
     // Handle events
     if let Some(ev) = terminal.window.getch() {
@@ -249,22 +215,52 @@ fn handle_terminal(
     // Resize terminal
     if resize {
         resize_term(0, 0);
-        window.erase();
+        terminal.window.erase();
     }
 
-    let (c, r) = get_window_size(window, wide);
+    let (c, r) = get_window_size(&terminal.window, terminal.wide);
 
     // Update terminal size
+    let mut terminal_size = terminal_size
+        .single_mut()
+        .expect("We should always have a terminal");
     terminal_size.0 = c;
     terminal_size.1 = r;
+}
+
+fn handle_terminal_commands(mut ev_cmd: EventReader<TermCommand>, mut exit: EventWriter<AppExit>) {
+    // Look for commands for the terminal
+    if let Some(ev) = ev_cmd.read().next() {
+        match ev {
+            TermCommand::Exit => {
+                curs_set(1);
+                endwin();
+                exit.write(AppExit::Success);
+            }
+        }
+    }
+}
+
+fn handle_terminal_draw(
+    terminal: Res<Term>,
+    terminal_size: Query<&TermSize>,
+    camera: Query<&GlobalTransform, With<TermCamera>>,
+    chars: Query<(&GlobalTransform, &TermChar)>,
+    texts: Query<(&GlobalTransform, &TermText, &TermTextAlign)>,
+) {
+    // Get our data
+    let terminal = terminal.into_inner();
+    let terminal_size = terminal_size
+        .single()
+        .expect("We should always have a terminal");
 
     // Prepare drawing
-    let c = c as usize;
-    let r = r as usize;
-    let mut buffer = vec![vec![(' ', minz); r]; c];
+    let c = terminal_size.0 as usize;
+    let r = terminal_size.1 as usize;
+    let mut buffer = vec![vec![(' ', terminal.minz); r]; c];
 
     // Calculate camera offset
-    let (camera_offset_x, camera_offset_y) = match camera.get_single() {
+    let (camera_offset_x, camera_offset_y) = match camera.single() {
         Err(_) => (0, 0),
         Ok(camera) => {
             let camera_x = camera.translation().x.round() as isize;
@@ -283,7 +279,7 @@ fn handle_terminal(
         let y = transform.translation().y.floor() as isize;
         let z = transform.translation().z;
 
-        if wide {
+        if terminal.wide {
             x *= 2;
         }
 
@@ -353,7 +349,9 @@ fn handle_terminal(
     for x in 0..c {
         for y in 0..r {
             // Using the string method here to handle emojis
-            window.mvaddstr(y as i32, x as i32, format!("{}", buffer[x][y].0));
+            terminal
+                .window
+                .mvaddstr(y as i32, x as i32, format!("{}", buffer[x][y].0));
         }
     }
 }
@@ -366,93 +364,93 @@ fn get_window_size(window: &Window, wide: bool) -> (i32, i32) {
 fn map_and_send_events(ev: Input, ev_input: &mut EventWriter<TermInput>) {
     match ev {
         Input::KeyBackspace => {
-            ev_input.send(TermInput::BackSpace);
+            ev_input.write(TermInput::BackSpace);
         }
-        Input::Character(c) if c == ' ' => {
-            ev_input.send(TermInput::SpaceBar);
+        Input::Character(' ') => {
+            ev_input.write(TermInput::SpaceBar);
         }
-        Input::Character(c) if c == '\n' => {
-            ev_input.send(TermInput::Enter);
+        Input::Character('\n') => {
+            ev_input.write(TermInput::Enter);
         }
-        Input::Character(c) if c == '\t' => {
-            ev_input.send(TermInput::Tab);
+        Input::Character('\t') => {
+            ev_input.write(TermInput::Tab);
         }
-        Input::Character(c) if c == '\u{1b}' => {
-            ev_input.send(TermInput::Escape);
+        Input::Character('\u{1b}') => {
+            ev_input.write(TermInput::Escape);
         }
         Input::Character(c) => {
-            ev_input.send(TermInput::Character(c));
+            ev_input.write(TermInput::Character(c));
         }
         Input::KeyMouse => {
             if let Ok(mouse_event) = getmouse() {
-                ev_input.send(TermInput::Mouse(mouse_event.x, mouse_event.y));
+                ev_input.write(TermInput::Mouse(mouse_event.x, mouse_event.y));
             };
         }
         Input::KeyLeft => {
-            ev_input.send(TermInput::Left);
+            ev_input.write(TermInput::Left);
         }
         Input::KeyRight => {
-            ev_input.send(TermInput::Right);
+            ev_input.write(TermInput::Right);
         }
         Input::KeyUp => {
-            ev_input.send(TermInput::Up);
+            ev_input.write(TermInput::Up);
         }
         Input::KeyDown => {
-            ev_input.send(TermInput::Down);
+            ev_input.write(TermInput::Down);
         }
         Input::KeyHome => {
-            ev_input.send(TermInput::Home);
+            ev_input.write(TermInput::Home);
         }
         Input::KeyEnd => {
-            ev_input.send(TermInput::End);
+            ev_input.write(TermInput::End);
         }
         Input::KeyIC => {
-            ev_input.send(TermInput::Insert);
+            ev_input.write(TermInput::Insert);
         }
         Input::KeyDC => {
-            ev_input.send(TermInput::Delete);
+            ev_input.write(TermInput::Delete);
         }
         Input::KeyPPage => {
-            ev_input.send(TermInput::PageUp);
+            ev_input.write(TermInput::PageUp);
         }
         Input::KeyNPage => {
-            ev_input.send(TermInput::PageDown);
+            ev_input.write(TermInput::PageDown);
         }
         Input::KeyF1 => {
-            ev_input.send(TermInput::F1);
+            ev_input.write(TermInput::F1);
         }
         Input::KeyF2 => {
-            ev_input.send(TermInput::F2);
+            ev_input.write(TermInput::F2);
         }
         Input::KeyF3 => {
-            ev_input.send(TermInput::F3);
+            ev_input.write(TermInput::F3);
         }
         Input::KeyF4 => {
-            ev_input.send(TermInput::F4);
+            ev_input.write(TermInput::F4);
         }
         Input::KeyF5 => {
-            ev_input.send(TermInput::F5);
+            ev_input.write(TermInput::F5);
         }
         Input::KeyF6 => {
-            ev_input.send(TermInput::F6);
+            ev_input.write(TermInput::F6);
         }
         Input::KeyF7 => {
-            ev_input.send(TermInput::F7);
+            ev_input.write(TermInput::F7);
         }
         Input::KeyF8 => {
-            ev_input.send(TermInput::F8);
+            ev_input.write(TermInput::F8);
         }
         Input::KeyF9 => {
-            ev_input.send(TermInput::F9);
+            ev_input.write(TermInput::F9);
         }
         Input::KeyF10 => {
-            ev_input.send(TermInput::F10);
+            ev_input.write(TermInput::F10);
         }
         Input::KeyF11 => {
-            ev_input.send(TermInput::F11);
+            ev_input.write(TermInput::F11);
         }
         Input::KeyF12 => {
-            ev_input.send(TermInput::F12);
+            ev_input.write(TermInput::F12);
         }
         _ => {
             warn!("Unknown input: {:?}", ev);
