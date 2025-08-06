@@ -1,8 +1,9 @@
-use bevy::prelude::*;
-use bevy_rapier2d::prelude::*;
 use rand::Rng;
+use std::time::Duration;
 
-use bevy_terminal_renderer::*;
+use avian2d::{parry::shape::SharedShape, prelude::*};
+use bevy::{app::ScheduleRunnerPlugin, prelude::*, scene::ScenePlugin};
+use bevy_terminal_renderer::prelude::*;
 
 const GROUND_SIZE: isize = 20;
 const WALL_SIZE: isize = 5;
@@ -10,30 +11,34 @@ const CAMERA_SPEED: f32 = 10.0;
 
 const NR_BALL_TYPES: usize = 3;
 const BALLS: [char; NR_BALL_TYPES] = ['0', 'O', '*'];
-const WIDE: bool = false;
 
 // Uncomment to use emojis
 // const NR_BALL_TYPES: usize = 7;
 // const BALLS: [char; NR_BALL_TYPES] = ['🔴', '🔵', '🟢', '🟡', '🟠', '🟣', '🟤'];
-// const WIDE: bool = true;
 
 #[derive(Component)]
 pub struct Ball;
 
 fn main() {
     // Initialize tracing_subscriber to write to a file
-    let file_appender = tracing_appender::rolling::never(".", "debug.log");
+    let file_appender = tracing_appender::rolling::never("../../", "debug.log");
     tracing_subscriber::fmt().with_writer(file_appender).init();
 
     App::new()
-        .add_plugins(MinimalPlugins) // The absolute basics
-        .add_plugins(TransformPlugin) // This is needed to update global transforms
+        // Add absolute basics
+        .add_plugins((
+            MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
+                1.0 / 60.0, // Run at 60fps
+            ))),
+            TransformPlugin, // Needed to update global transforms
+        ))
+        // Add a physics engine
+        .add_plugins((
+            (AssetPlugin::default(), ScenePlugin), // Needed for aiven physics
+            PhysicsPlugins::default(),
+        ))
         // Add our plugin and a physics engine
-        .add_plugins(TermPlugin {
-            wide: WIDE,
-            ..Default::default()
-        })
-        // .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(1.0))
+        .add_plugins(TermPlugin::default())
         // Add our systems
         .add_systems(Startup, create_scene)
         .add_systems(
@@ -52,8 +57,11 @@ fn create_scene(mut commands: Commands) {
 
     // Create ground
     commands
-        // .spawn(Collider::cuboid(GROUND_SIZE as f32, 1.0))
-        .spawn(Transform::from_xyz(0.0, 0.0, 1.0))
+        .spawn((
+            RigidBody::Static,
+            <SharedShape as Into<Collider>>::into(SharedShape::cuboid(GROUND_SIZE as f32, 1.0)),
+            Transform::from_xyz(0.0, 0.0, 1.0),
+        ))
         .with_children(|p| {
             for i in -GROUND_SIZE..=GROUND_SIZE {
                 p.spawn(TermSpriteBundle {
@@ -66,8 +74,11 @@ fn create_scene(mut commands: Commands) {
     // Create walls
     for i in [-GROUND_SIZE, GROUND_SIZE] {
         commands
-            //     .spawn(Collider::cuboid(1.0, WALL_SIZE as f32))
-            .spawn(Transform::from_xyz(i as f32, WALL_SIZE as f32, 1.0))
+            .spawn((
+                RigidBody::Static,
+                <SharedShape as Into<Collider>>::into(SharedShape::cuboid(1.0, WALL_SIZE as f32)),
+                Transform::from_xyz(i as f32, WALL_SIZE as f32, 1.0),
+            ))
             .with_children(|p| {
                 for i in -WALL_SIZE..=WALL_SIZE {
                     p.spawn(TermSpriteBundle {
@@ -111,9 +122,9 @@ fn spawn_balls(mut input: EventReader<TermInput>, mut commands: Commands) {
 
             commands
                 .spawn(Ball)
-                //     .insert(RigidBody::Dynamic)
-                //     .insert(Collider::ball(1.0))
-                //     .insert(Restitution::coefficient(1.1))
+                .insert(RigidBody::Dynamic)
+                .insert(Collider::circle(1.0))
+                .insert(Restitution::new(1.1))
                 .insert(TermSpriteBundle {
                     transform: Transform::from_xyz(rx, ry, 0.0),
                     char: TermChar(btype),

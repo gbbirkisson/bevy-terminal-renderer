@@ -2,5 +2,5 @@
 Cargo.lock
 
 # Example files
-/examples/**/*.log
+/*.log
 /examples/**/target

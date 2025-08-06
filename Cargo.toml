@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.16.0", default-features = false }
+bevy = { version = "0.16.1", default-features = false }
 pancurses = { version = "0.17.0", features = ["wide"] }
 tracing = "0.1.41"

@@ -19,7 +19,7 @@ check: fmt clippy
 
 .PHONY: example-physics-balls
 example-physics-balls:
-	cd ${EXAMPLE_PHYSICS_BALLS} && cargo run
+	cd ${EXAMPLE_PHYSICS_BALLS} && cargo run -r
 
 .PHONY: example-physics-balls-record
 example-physics-balls-record:
@@ -28,7 +28,7 @@ example-physics-balls-record:
 
 .PHONY: example-spinning-diamond
 example-spinning-diamond:
-	cd ${EXAMPLE_SPINNING_DIAMOND} && cargo run
+	cd ${EXAMPLE_SPINNING_DIAMOND} && cargo run -r
 
 .PHONY: example-spinning-diamond-record
 example-spinning-diamond-record:

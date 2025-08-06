@@ -1,8 +1,10 @@
-use bevy::prelude::*;
-use bevy_terminal_renderer::*;
+use std::time::Duration;
+
+use bevy::{app::ScheduleRunnerPlugin, prelude::*};
+use bevy_terminal_renderer::prelude::*;
 
 const DIAMOND_SIZE: isize = 12;
-const ROTATION_SPEED: f32 = 20.0;
+const ROTATION_SPEED: f32 = 2.0;
 const DIAMOND_CHAR: char = '+';
 
 #[derive(Component)]
@@ -15,14 +17,20 @@ pub struct DiamondBundle {
 }
 
 fn main() {
+    let file_appender = tracing_appender::rolling::never("../../", "debug.log");
+    tracing_subscriber::fmt().with_writer(file_appender).init();
+
     App::new()
-        .add_plugins(MinimalPlugins) // The absolute basics
-        .add_plugins(TransformPlugin) // This is needed to update global transforms
-        // Add our plugin
-        .add_plugins(TermPlugin {
-            wide: true,
-            minz: 0.0,
-        })
+        // Add absolute basics
+        .add_plugins((
+            MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
+                1.0 / 60.0, // Run at 60fps
+            ))),
+            TransformPlugin, // This is needed to update global transforms
+        ))
+        // Add terminal plugin
+        .add_plugins(TermPlugin { minz: -0.01 })
+        // Add our systems
         .add_systems(Startup, create_scene)
         .add_systems(Update, (spin_controls, exit_control))
         .run();
@@ -133,7 +141,7 @@ fn spin_controls(
     mut input: EventReader<TermInput>,
 ) {
     let mut x_rotation = 0.0;
-    let y_rotation = 0.5;
+    let y_rotation = ROTATION_SPEED / 4.0;
     for i in input.read() {
         match i {
             TermInput::Up => {
